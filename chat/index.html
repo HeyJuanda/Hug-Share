@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Chat • Hug-Share!</title>
-  <link rel="icon" href="hug.svg" type="image/svg+xml">
+  <link rel="icon" href="../logo.png" type="image/svg+xml">
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
@@ -378,10 +378,6 @@
         </div>
         <div class="flex gap-2 items-center relative">
           <button id="btnInvite" class="btn hidden">Invitar</button>
-          <button id="btnCopyInviteLink" class="btn hidden">
-              <img src="svg/link.svg" alt="Copiar enlace de invitación" class="w-5 h-5" style="filter: brightness(0) invert(1);">
-              Copiar Enlace
-          </button>
           
           <button id="btnChatOptions" class="btn btn-icon hidden">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6">
@@ -570,7 +566,6 @@
     const btnAttach = document.getElementById("btnAttach");
     const scrollToBottomBtn = document.getElementById("scrollToBottomBtn");
     const searchInput = document.getElementById("searchInput");
-    const btnCopyInviteLink = document.getElementById("btnCopyInviteLink"); // <-- Nuevo botón
 
     // NUEVOS ELEMENTOS PARA EL MODAL DE CREACIÓN
     const newChatModal = document.getElementById('newChatModal');
@@ -756,17 +751,12 @@
       e.preventDefault();
       const name = document.getElementById("newGroupName").value.trim();
       if (!name) return alert("Escribe un nombre de grupo.");
-      
-      // Generar un nuevo token de invitación único
-      const inviteToken = doc(collection(db, `${appPath}/groups`)).id;
-
       await addDoc(collection(db, `${appPath}/groups`), {
         name,
         owner: currentUser.uid,
         members: [currentUser.uid],
         membersNames: [currentUser.displayName || currentUser.email],
-        createdAt: serverTimestamp(),
-        inviteToken: inviteToken // <-- Agregar el nuevo campo
+        createdAt: serverTimestamp()
       });
       document.getElementById("newGroupName").value = "";
       newChatModal.style.display = 'none';
@@ -1048,31 +1038,11 @@
       btnChatOptions.classList.remove('hidden');
       if (type === "group") {
         btnInvite.classList.remove("hidden");
-        btnCopyInviteLink.classList.remove("hidden"); // <-- Muestra el nuevo botón
         btnBlockChat.classList.add("hidden");
       } else {
         btnInvite.classList.add("hidden");
-        btnCopyInviteLink.classList.add("hidden"); // <-- Oculta el nuevo botón
         btnBlockChat.classList.remove("hidden");
       }
-      
-      // Lógica para copiar el enlace
-      btnCopyInviteLink.onclick = async () => {
-          const inviteToken = currentChat.data.inviteToken;
-          if (!inviteToken) {
-              alert("No se encontró el token de invitación para este grupo.");
-              return;
-          }
-          const inviteLink = `${window.location.origin}${window.location.pathname}?join=${inviteToken}`;
-          try {
-              await navigator.clipboard.writeText(inviteLink);
-              alert("¡Enlace copiado al portapapeles! 📋");
-          } catch (err) {
-              console.error('Error al copiar el enlace:', err);
-              alert("No se pudo copiar el enlace. Intenta copiarlo manualmente: " + inviteLink);
-          }
-      };
-
 
       messagesWrap.innerHTML = "";
 
@@ -1400,7 +1370,6 @@
         currentChat = null;
         messagesWrap.innerHTML = "<p class='text-gray-400'>Selecciona un chat.</p>";
         btnInvite.classList.add("hidden");
-        btnCopyInviteLink.classList.add("hidden"); // <-- Oculta el botón al salir
         btnChatOptions.classList.add('hidden');
         // Ocultar chat y mostrar lista
         chatMainContainer.classList.add('hidden');
@@ -1441,77 +1410,15 @@
             closeAllOptionMenus();
         }
     });
-    
-    // --- Lógica para manejar enlaces de invitación
-    async function handleInviteLink() {
-      const urlParams = new URLSearchParams(window.location.search);
-      const inviteToken = urlParams.get('join');
-      
-      if (inviteToken && currentUser) {
-        console.log(`Invitación de unión encontrada. Token: ${inviteToken}`);
-        
-        try {
-          const q = query(collection(db, `${appPath}/groups`), where("inviteToken", "==", inviteToken));
-          const snap = await getDocs(q);
-
-          if (snap.empty) {
-            alert("El enlace de invitación no es válido o el grupo ya no existe.");
-            const newUrl = window.location.origin + window.location.pathname;
-            window.history.replaceState({}, document.title, newUrl);
-            return;
-          }
-
-          const groupDoc = snap.docs[0];
-          const data = groupDoc.data();
-          const groupId = groupDoc.id;
-
-          if (data.members.includes(currentUser.uid)) {
-            alert("Ya eres miembro de este grupo.");
-            const newUrl = window.location.origin + window.location.pathname;
-            window.history.replaceState({}, document.title, newUrl);
-            openChat("group", groupId, data, data.name);
-            return;
-          }
-
-          const updatedMembers = [...data.members, currentUser.uid];
-          const updatedNames = [...data.membersNames, currentUser.displayName || currentUser.email];
-
-          await updateDoc(groupDoc.ref, {
-            members: updatedMembers,
-            membersNames: updatedNames
-          });
-
-          alert(`¡Te has unido al grupo "${data.name}"! 🎉`);
-          const newUrl = window.location.origin + window.location.pathname;
-          window.history.replaceState({}, document.title, newUrl);
-          openChat("group", groupId, data, data.name);
-
-        } catch (error) {
-          console.error("Error al unirte al grupo:", error);
-          alert("Ocurrió un error al intentar unirte al grupo. Por favor, inténtalo de nuevo más tarde.");
-          const newUrl = window.location.origin + window.location.pathname;
-          window.history.replaceState({}, document.title, newUrl);
-        }
-      }
-    }
-
 
     onAuthStateChanged(auth, (user) => {
         console.log("Estado de autenticación cambiado.");
-      if (!user) { 
-        // Redirigir al inicio de sesión, conservando el token de invitación en la URL
-        const urlParams = new URLSearchParams(window.location.search);
-        const inviteToken = urlParams.get('join');
-        const loginUrl = inviteToken ? `../login/?join=${inviteToken}` : "../login/";
-        window.location.href = loginUrl;
-        return; 
-      }
+      if (!user) { window.location.href = "../login/"; return; }
       currentUser = user;
       console.log("Usuario autenticado. Cargando grupos y chats.");
-      handleInviteLink(); // <-- Llama a la nueva función
       loadGroups();
       loadPrivates();
     });
   </script>
 </body>
-</html>
+</html>a
